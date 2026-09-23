@@ -1,0 +1,34 @@
+# Local OpenMetadata for E2E testing: official OM compose (om-official.yml, untouched copy of
+# https://github.com/open-metadata/OpenMetadata/blob/main/docker/docker-compose-quickstart/docker-compose.yml,
+# Apache-2.0) + this override.
+# Usage:  docker compose -p lakeom -f om-official.yml -f override.yml up -d
+# Container names / host ports are changed so this can coexist with an OM dev checkout. The Airflow
+# ingestion container is dropped (this project pushes over REST and never uses OM pipelines).
+# TiDB Cloud Lake itself is a managed service: point config.yaml at your Lake cluster; nothing runs here.
+services:
+  mysql:
+    container_name: lakeom_mysql
+    ports: !override []
+    volumes: !override
+      - lakeom-db-data:/var/lib/mysql
+
+  elasticsearch:
+    container_name: lakeom_elasticsearch
+    ports: !override []
+
+  execute-migrate-all:
+    container_name: lakeom_migrate
+
+  openmetadata-server:
+    container_name: lakeom_server
+
+  ingestion:
+    profiles: ["disabled"]
+
+volumes:
+  lakeom-db-data:
+
+networks:
+  app_net:
+    ipam: !override
+      driver: default

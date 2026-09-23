@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env(value: Any) -> Any:
+    if isinstance(value, str):
+        return _ENV_REF.sub(lambda m: os.environ.get(m.group(1), ""), value)
+    if isinstance(value, dict):
+        return {k: _expand_env(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(v) for v in value]
+    return value
+
+
+@dataclass
+class LakeConfig:
+    dsn: str
+
+
+@dataclass
+class OpenMetadataConfig:
+    host: str
+    jwt_token: str
+    timeout_seconds: int = 30
+
+
+@dataclass
+class BotConfig:
+    name: str = "LakeIngestionBot"
+    # OneHour | 1 | 7 | 30 | 60 | 90 | Unlimited (days)
+    token_expiry: str = "90"
+    email_domain: str = "open-metadata.org"
+
+
+@dataclass
+class ServiceConfig:
+    name: str
+    display_name: str = "TiDB Cloud Lake"
+    description: str = ""
+    icon_url: str = ""
+
+
+@dataclass
+class MetadataConfig:
+    catalogs: list[str] = field(default_factory=list)
+    exclude_databases: list[str] = field(
+        default_factory=lambda: ["system", "information_schema", "system_history"]
+    )
+    mark_deleted: bool = True
+
+
+@dataclass
+class StagesConfig:
+    """TiDB Cloud Lake named stages are tenant-level; OM only has Table (tableType=Stage) under a schema.
+
+    When enabled, stages are mounted as `<service>.<database>.<schema>.<stage>` and stage<->table
+    lineage edges are synced (COPY INTO both directions, CTAS/DML reading `@stage`).
+    """
+
+    enabled: bool = False
+    database: str = "default"
+    schema: str = "stages"
+
+
+@dataclass
+class LineageConfig:
+    state_file: str = ".state/lineage_watermark.json"
+    include_kinds: list[str] = field(default_factory=lambda: ["CTAS", "DML", "CREATE_VIEW"])
+    lookback_seconds: int = 120
+    prune_view_upstreams: bool = True
+    page_size: int = 5000
+
+
+@dataclass
+class Config:
+    lake: LakeConfig
+    openmetadata: OpenMetadataConfig
+    service: ServiceConfig
+    metadata: MetadataConfig
+    lineage: LineageConfig
+    bot: BotConfig
+    stages: StagesConfig
+
+    @classmethod
+    def load(cls, path: str | Path) -> "Config":
+        raw = _expand_env(yaml.safe_load(Path(path).read_text()) or {})
+        return cls(
+            lake=LakeConfig(**raw["lake"]),
+            openmetadata=OpenMetadataConfig(**raw["openmetadata"]),
+            service=ServiceConfig(**raw["service"]),
+            metadata=MetadataConfig(**raw.get("metadata", {})),
+            lineage=LineageConfig(**raw.get("lineage", {})),
+            bot=BotConfig(**raw.get("bot", {})),
+            stages=StagesConfig(**raw.get("stages", {})),
+        )
