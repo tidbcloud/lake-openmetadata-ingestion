@@ -27,7 +27,10 @@ def _warn_on_plaintext_host(host: str) -> None:
 
 
 def _check_transport(host: str, require_tls: bool) -> None:
-    if require_tls and urlsplit(host).scheme.lower() != "https":
+    parts = urlsplit(host)
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username is not None or parts.query or parts.fragment:
+        raise ValueError("OpenMetadata host must be an HTTP(S) base URL without credentials, query or fragment")
+    if require_tls and parts.scheme.lower() != "https":
         raise ValueError("OpenMetadata require_tls requires an https:// endpoint")
     _warn_on_plaintext_host(host)
 
@@ -48,7 +51,7 @@ class OMError(RuntimeError):
 
 class OpenMetadataClient:
     def __init__(self, host: str, jwt_token: str, timeout: int = 30, *,
-                 tls_ca_bundle: str | None = None, require_tls: bool = False):
+                 tls_ca_bundle: str | None = None, require_tls: bool = True):
         self._base = host.rstrip("/")
         self._timeout = timeout
         _check_transport(self._base, require_tls)
@@ -64,7 +67,9 @@ class OpenMetadataClient:
 
     def _req(self, method: str, path: str, *, json: Any = None, params: dict | None = None) -> Any:
         url = f"{self._base}{path}"
-        resp = self._s.request(method, url, json=json, params=params, timeout=self._timeout)
+        resp = self._s.request(method, url, json=json, params=params, timeout=self._timeout, allow_redirects=False)
+        if 300 <= resp.status_code < 400:
+            raise OMError(resp.status_code, "Redirects are not allowed for credential-bearing requests")
         if resp.status_code >= 400:
             raise OMError(resp.status_code, resp.text[:2000])
         if not resp.content:
@@ -94,7 +99,7 @@ class OpenMetadataClient:
 
     @classmethod
     def login_basic(cls, host: str, email: str, password: str, timeout: int = 30, *,
-                    tls_ca_bundle: str | None = None, require_tls: bool = False) -> str:
+                    tls_ca_bundle: str | None = None, require_tls: bool = True) -> str:
         """Basic-auth login (OM's built-in auth provider); returns a short-lived access token."""
         import base64
 
@@ -104,9 +109,10 @@ class OpenMetadataClient:
             json={"email": email, "password": base64.b64encode(password.encode()).decode()},
             timeout=timeout,
             verify=_tls_verify(tls_ca_bundle),
+            allow_redirects=False,
         )
-        if resp.status_code >= 400:
-            raise OMError(resp.status_code, resp.text[:2000])
+        if resp.status_code >= 300:
+            raise OMError(resp.status_code, "OpenMetadata login failed")
         return resp.json()["accessToken"]
 
     def upsert_policy(self, name: str, description: str, rules: list[dict]) -> dict:
@@ -127,6 +133,8 @@ class OpenMetadataClient:
                 "name": name,
                 "email": email,
                 "isBot": True,
+                "isAdmin": False,
+                "teams": [],
                 "botName": name,
                 "roles": role_ids,
                 "authenticationMechanism": {"authType": "JWT", "config": {"JWTTokenExpiry": token_expiry}},

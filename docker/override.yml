@@ -1,4 +1,4 @@
-# Local OpenMetadata for E2E testing: official OM compose (om-official.yml, untouched copy of
+# Local OpenMetadata for E2E testing: official OM compose (om-official.yml, hardened local-demo copy of
 # https://github.com/open-metadata/OpenMetadata/blob/main/docker/docker-compose-quickstart/docker-compose.yml,
 # Apache-2.0) + this override.
 # Usage:  docker compose -p lakeom -f om-official.yml -f override.yml up -d
@@ -11,6 +11,7 @@ services:
     ports: !override []
     volumes: !override
       - lakeom-db-data:/var/lib/mysql
+      - ./zz-secure-credentials.sh:/docker-entrypoint-initdb.d/zz-secure-credentials.sh:ro
 
   elasticsearch:
     container_name: lakeom_elasticsearch

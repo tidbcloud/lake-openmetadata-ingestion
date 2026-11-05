@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from .bot_bootstrap import bootstrap_bot
+from .bot_bootstrap import bootstrap_bot, validate_role_id
 from .config import Config
 from .lake_client import LakeClient
 from .lineage_sync import LineageSync
@@ -31,6 +31,7 @@ def _clients(cfg: Config) -> tuple[LakeClient, OpenMetadataClient]:
 
 def cmd_init_bot(cfg: Config, args: argparse.Namespace) -> int:
     """Needs an admin credential: OM_ADMIN_TOKEN, or OM_ADMIN_EMAIL + OM_ADMIN_PASSWORD (basic auth)."""
+    validate_role_id(cfg.bot.role_id)
     om_cfg = cfg.openmetadata
     admin_token = os.environ.get("OM_ADMIN_TOKEN")
     if not admin_token:
@@ -42,7 +43,7 @@ def cmd_init_bot(cfg: Config, args: argparse.Namespace) -> int:
     om = OpenMetadataClient(om_cfg.host, admin_token, om_cfg.timeout_seconds,
                             tls_ca_bundle=om_cfg.tls_ca_bundle, require_tls=om_cfg.require_tls)
 
-    res = bootstrap_bot(om, cfg.bot.name, cfg.bot.token_expiry, cfg.bot.email_domain)
+    res = bootstrap_bot(om, cfg.bot.name, cfg.bot.token_expiry, cfg.bot.email_domain, role_id=cfg.bot.role_id)
     print(f"bot={res.bot_name} user_id={res.bot_user_id} role={res.role} policy={res.policy}")
     # getattr: cmd_init_bot is called directly by embedders/tests with a partial Namespace.
     if getattr(args, "print_token", False):
@@ -101,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     bot = sub.add_parser(
         "init-bot",
-        help="(admin) provision an instance-wide bot + policy + role and write its JWT",
+        help="(admin) provision a bot with an explicit administrator-managed role and write its JWT",
     )
     token_out = bot.add_mutually_exclusive_group()
     token_out.add_argument(
@@ -126,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = Config.load(args.config)
+    cfg = Config.load(args.config, initializing_bot=args.cmd == "init-bot")
 
     if args.cmd == "init-bot":
         return cmd_init_bot(cfg, args)

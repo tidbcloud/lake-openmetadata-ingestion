@@ -47,9 +47,8 @@ def test_environment_false_is_not_treated_as_true():
 
 
 def test_plaintext_warning_does_not_log_url_credentials(caplog):
-    with caplog.at_level(logging.WARNING):
-        OpenMetadataClient("http://user:private-password@om.example/api?token=private-token", "jwt")
-    assert "plaintext http" in caplog.text
+    with pytest.raises(ValueError, match="without credentials"):
+        OpenMetadataClient("http://user:private-password@om.example/api?token=private-token", "jwt", require_tls=False)
     assert "private-password" not in caplog.text
     assert "private-token" not in caplog.text
 
@@ -72,7 +71,7 @@ def test_strict_transport_rejects_plaintext_before_credentials_are_sent(host):
     with pytest.raises(ValueError, match="require_tls"):
         OpenMetadataClient(host, "jwt", require_tls=True)
     # Existing explicit HTTP configurations remain accepted until the operator opts in.
-    assert OpenMetadataClient(host, "jwt")._s.verify is True
+    assert OpenMetadataClient(host, "jwt", require_tls=False)._s.verify is True
 
 
 def test_init_bot_forwards_transport_settings_on_both_paths(init_bot_cfg, monkeypatch, tmp_path):

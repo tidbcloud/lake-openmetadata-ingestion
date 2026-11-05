@@ -14,13 +14,13 @@ from lake_openmetadata_ingestion.om_client import OpenMetadataClient
 
 def test_plaintext_remote_host_warns(caplog):
     with caplog.at_level(logging.WARNING):
-        OpenMetadataClient("http://om.example.com/api", "jwt")
+        OpenMetadataClient("http://om.example.com/api", "jwt", require_tls=False)
     assert "plaintext http" in caplog.text
 
 
 def test_plaintext_loopback_host_does_not_warn(caplog):
     with caplog.at_level(logging.WARNING):
-        OpenMetadataClient("http://localhost:8585/api", "jwt")
+        OpenMetadataClient("http://localhost:8585/api", "jwt", require_tls=False)
     assert "plaintext http" not in caplog.text
 
 

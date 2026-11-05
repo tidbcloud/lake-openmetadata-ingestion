@@ -80,7 +80,7 @@ def init_bot_cfg(monkeypatch):
         service=ServiceConfig(name="lake_prod"),
         metadata=MetadataConfig(),
         lineage=LineageConfig(),
-        bot=BotConfig(),
+        bot=BotConfig(role_id="00000000-0000-0000-0000-000000000001"),
         stages=StagesConfig(),
     )
     monkeypatch.setenv("OM_ADMIN_TOKEN", "admin-token")
@@ -97,6 +97,7 @@ def init_bot_cfg(monkeypatch):
 @pytest.fixture
 def init_bot_cfg_plaintext_http(init_bot_cfg):
     init_bot_cfg.openmetadata.host = "http://om.example.com/api"
+    init_bot_cfg.openmetadata.require_tls = False
     return init_bot_cfg
 
 

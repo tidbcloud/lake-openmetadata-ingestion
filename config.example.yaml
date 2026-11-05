@@ -4,11 +4,11 @@ lake:
   dsn: "lake://${LAKE_USER}:${LAKE_PASSWORD}@${LAKE_HOST}:443/?warehouse=${LAKE_WAREHOUSE}"
 
 openmetadata:
-  host: "http://localhost:8585/api"
+  host: "https://metadata.example.com/api"
   jwt_token: "${OM_JWT_TOKEN}"
   timeout_seconds: 30
-  # Optional production settings; existing local HTTP configurations still work.
-  require_tls: false
+  # TLS is required by default. Set false only for an explicit local demo.
+  require_tls: true
   # tls_ca_bundle: /etc/ssl/certs/openmetadata-ca.pem
 
 service:
@@ -44,7 +44,9 @@ lineage:
 bot:
   # Used only by `init-bot` (run once by an OM admin).
   name: LakeIngestionBot
-  token_expiry: "90"        # OneHour | 1 | 7 | 30 | 60 | 90 | Unlimited (days)
+  token_expiry: "7"         # OneHour | 1 | 7 | 30 (days)
+  # Required for init-bot: scoped role pre-provisioned by your OM administrator.
+  role_id: ""
   email_domain: open-metadata.org
 
 stages:

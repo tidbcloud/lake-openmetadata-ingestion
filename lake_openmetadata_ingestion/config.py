@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import stat
+from urllib.parse import urlsplit, parse_qsl
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,24 +40,38 @@ def _expand_env(value: Any, missing: list[str] | None = None) -> Any:
     return value
 
 
-def _warn_if_other_users_can_read(path: Path) -> None:
-    """The config file holds the Lake DSN password (and the path of the OM token file): 0600 it."""
+def _read_private_config(path: Path) -> str:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(path, flags)
     try:
-        mode = stat.S_IMODE(path.stat().st_mode)
-    except OSError:
-        return
-    if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        logger.warning(
-            "config file %s is accessible by other users (mode %o) but holds the Lake DSN "
-            "credentials; chmod 600 it",
-            path,
-            mode,
-        )
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or (os.name == "posix" and info.st_mode & 0o077):
+            raise ValueError("Config must be a regular non-symlink file; chmod 600 it")
+        with os.fdopen(fd, "r", closefd=False) as stream:
+            text = stream.read(1024 * 1024 + 1)
+        if len(text) > 1024 * 1024:
+            raise ValueError("Config exceeds 1 MiB")
+        return text
+    finally:
+        os.close(fd)
 
 
 @dataclass
 class LakeConfig:
     dsn: str
+    require_tls: bool = True
+
+    def __post_init__(self):
+        parts = urlsplit(self.dsn)
+        if not parts.hostname or parts.scheme not in ("lake", "https", "http"):
+            raise ValueError("An explicit Lake endpoint is required")
+        if not isinstance(self.require_tls, bool):
+            raise ValueError("lake.require_tls must be true or false")
+        modes = [v for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() == "sslmode"]
+        if len(modes) > 1 or (modes and modes[0] not in ("require", "disable")):
+            raise ValueError("Invalid Lake sslmode")
+        if self.require_tls and (parts.scheme == "http" or modes == ["disable"]):
+            raise ValueError("Lake require_tls requires TLS; plaintext is an explicit local-development opt-out")
 
 
 @dataclass
@@ -65,7 +80,7 @@ class OpenMetadataConfig:
     jwt_token: str
     timeout_seconds: int = 30
     tls_ca_bundle: str | None = None
-    require_tls: bool = False
+    require_tls: bool = True
 
     def __post_init__(self):
         # Environment interpolation produces strings; do not treat the string "false" as true.
@@ -79,7 +94,12 @@ class OpenMetadataConfig:
 class BotConfig:
     name: str = "LakeIngestionBot"
     # OneHour | 1 | 7 | 30 | 60 | 90 | Unlimited (days)
-    token_expiry: str = "90"
+    token_expiry: str = "7"
+    role_id: str = ""
+
+    def __post_init__(self):
+        if self.token_expiry not in ("OneHour", "1", "7", "30"):
+            raise ValueError("bot.token_expiry must be OneHour, 1, 7 or 30 days")
     email_domain: str = "open-metadata.org"
 
 
@@ -133,18 +153,15 @@ class Config:
     stages: StagesConfig
 
     @classmethod
-    def load(cls, path: str | Path) -> "Config":
+    def load(cls, path: str | Path, *, initializing_bot: bool = False) -> "Config":
         path = Path(path)
         missing: list[str] = []
-        raw = _expand_env(yaml.safe_load(path.read_text()) or {}, missing)
+        parsed = yaml.safe_load(_read_private_config(path)) or {}
+        if initializing_bot and isinstance(parsed.get("openmetadata"), dict):
+            parsed["openmetadata"]["jwt_token"] = ""
+        raw = _expand_env(parsed, missing)
         if missing:
-            logger.warning(
-                "config %s references unset environment variables (%s); they expand to empty "
-                "strings, which makes the corresponding credential empty",
-                path,
-                ", ".join(sorted(set(missing))),
-            )
-        _warn_if_other_users_can_read(path)
+            raise ValueError("Config references unset environment variables: " + ", ".join(sorted(set(missing))))
         return cls(
             lake=LakeConfig(**raw["lake"]),
             openmetadata=OpenMetadataConfig(**raw["openmetadata"]),
