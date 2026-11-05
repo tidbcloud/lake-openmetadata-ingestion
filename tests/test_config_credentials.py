@@ -69,13 +69,15 @@ def test_config_load_is_quiet_for_a_private_file_with_all_vars_set(
     assert caplog.text == ""
 
 
-def test_config_symlink_is_rejected(tmp_path):
+def test_config_mount_symlink_checks_target_permissions(tmp_path):
     target = tmp_path / 'private.yaml'
     target.write_text(MINIMAL.format(user='u', password='p'))
     target.chmod(0o600)
     link = tmp_path / 'link.yaml'
     link.symlink_to(target)
-    with pytest.raises((OSError, ValueError)):
+    assert Config.load(link).service.name == "lake_prod"
+    target.chmod(0o644)
+    with pytest.raises(ValueError, match="chmod 600"):
         Config.load(link)
 
 

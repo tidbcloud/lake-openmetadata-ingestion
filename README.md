@@ -35,6 +35,7 @@ The CLI is installed as `lake-om` (alias: `lake-openmetadata-ingestion`).
 
 ```bash
 cp config.example.yaml config.yaml          # edit; ${ENV_VAR} placeholders are expanded
+chmod 600 config.yaml
 
 # once, by an OM admin: attach the explicit pre-provisioned role and write a 0600 JWT file
 OM_ADMIN_EMAIL=admin@example.com OM_ADMIN_PASSWORD=... lake-om -c config.yaml init-bot
@@ -181,7 +182,9 @@ their contents into job logs.
 
 ## Hardened defaults
 
-Configuration files must be regular non-symlink files with mode 0600 or stricter.
+Configuration targets must be regular files with mode 0600 or stricter. Secure
+symlink-based secret mounts remain supported; permissions are checked on the
+opened target.
 Missing `${VARIABLE}` values now fail startup. Both Lake and OpenMetadata require
 TLS by default; `require_tls: false` is an explicit local-demo opt-out. OpenMetadata
 requests refuse redirects, and custom CA bundles retain certificate/hostname

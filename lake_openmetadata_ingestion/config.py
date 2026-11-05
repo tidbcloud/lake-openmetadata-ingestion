@@ -41,12 +41,12 @@ def _expand_env(value: Any, missing: list[str] | None = None) -> Any:
 
 
 def _read_private_config(path: Path) -> str:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
     fd = os.open(path, flags)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or (os.name == "posix" and info.st_mode & 0o077):
-            raise ValueError("Config must be a regular non-symlink file; chmod 600 it")
+        if not os.path.samestat(info, path.stat()) or not stat.S_ISREG(info.st_mode) or (os.name == "posix" and info.st_mode & 0o077):
+            raise ValueError("Config target must be a regular private file; chmod 600 it")
         with os.fdopen(fd, "r", closefd=False) as stream:
             text = stream.read(1024 * 1024 + 1)
         if len(text) > 1024 * 1024:
