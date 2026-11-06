@@ -50,3 +50,25 @@ def test_demo_secret_bootstrap_is_private_and_refuses_overwrite(tmp_path):
     second = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
     assert second.returncode != 0
     assert target.read_bytes() == old
+
+
+def test_demo_jwt_keys_are_unique_and_readable_as_der(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+    source = Path(__file__).resolve().parents[1] / 'docker' / 'bootstrap-env.py'
+    public_keys = []
+    for name in ('first', 'second'):
+        directory = tmp_path / name
+        directory.mkdir()
+        script = directory / 'bootstrap-env.py'
+        shutil.copy(source, script)
+        subprocess.run([sys.executable, str(script)], check=True, capture_output=True)
+        private = directory / 'jwt-keys' / 'private_key.der'
+        public = directory / 'jwt-keys' / 'public_key.der'
+        assert private.stat().st_mode & 0o777 == 0o600
+        result = subprocess.run(['openssl', 'pkey', '-inform', 'DER', '-in', str(private), '-pubout', '-outform', 'DER'], check=True, capture_output=True)
+        assert result.stdout == public.read_bytes()
+        public_keys.append(result.stdout)
+    assert public_keys[0] != public_keys[1]

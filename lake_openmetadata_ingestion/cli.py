@@ -82,7 +82,7 @@ def cmd_metadata(cfg: Config) -> int:
     )
     for err in stats.errors[:20]:
         print(f"  ! {err}")
-    return 1 if stats.failed and not stats.tables else 0
+    return 1 if stats.failed else 0
 
 
 def cmd_lineage(cfg: Config, full: bool) -> int:

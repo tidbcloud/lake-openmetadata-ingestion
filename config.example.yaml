@@ -24,7 +24,7 @@ metadata:
   catalogs: []
   exclude_databases: [system, information_schema, system_history]
   # Soft-delete OM databases/schemas/tables that no longer exist in Lake.
-  mark_deleted: true
+  mark_deleted: false
 
 lineage:
   # Watermark file: the ONLY state this tool keeps. After each successful `lineage` run it stores the

@@ -87,7 +87,7 @@ See `config.example.yaml` for every option. The ones that matter operationally:
 | `lake.dsn` | Connection string of your Lake cluster, e.g. `lake://user:pass@<host>.tidbcloud.com:443/?warehouse=<wh>`. |
 | `service.name` | OM service name; part of every FQN. Changing it means a fresh sync into a new service. |
 | `metadata.catalogs` | Catalogs to sync (empty = all from `SHOW CATALOGS`). |
-| `metadata.mark_deleted` | Soft-delete OM schemas/tables that disappeared from Lake (default `true`). |
+| `metadata.mark_deleted` | Soft-delete OM schemas/tables that disappeared from Lake (default `false`; enable explicitly after validating a full sync). |
 | `lineage.state_file` | **Watermark file** — the only state this tool keeps. See below. |
 | `lineage.lookback_seconds` | Overlap re-read before the watermark to absorb late `lineage_history` merges. |
 | `lineage.prune_view_upstreams` | Remove OM upstream edges of a redefined view that Lake no longer reports. |
@@ -206,3 +206,18 @@ Fernet secrets, refuses overwrite, and prints no values. Keep this file with the
 existing database volume; changing Fernet keys requires OM's key-rotation process.
 Published ports bind only to loopback; self-signup is disabled and API password
 masking enabled. This is a local-only demo, not a public deployment template.
+
+### Safe reconciliation and local demo keys
+
+Metadata deletion now defaults off. Enable `metadata.mark_deleted` explicitly
+only after a full successful sync. A failed table/stage write suppresses the
+entire deletion sweep and produces a nonzero metadata command exit status.
+
+Run `python docker/bootstrap-env.py` before starting the local demo. It creates
+unique RSA signing keys in `docker/jwt-keys/` and a unique JWT key ID alongside
+the private `.env`; both migrate and server containers mount those keys read-only.
+The key files are PKCS8/SPKI DER, mode 0600. Ensure your chosen container user can
+read the mounted files without making the private key world-readable. Keep the
+same keys for an existing database volume. Existing demo installations must
+explicitly plan key/token rotation; the bootstrap refuses to overwrite any
+existing secrets and no rotation is performed automatically.

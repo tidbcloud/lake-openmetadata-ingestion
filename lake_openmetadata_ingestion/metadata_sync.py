@@ -107,6 +107,7 @@ class MetadataSync:
                 schema_fqn = fqn.build(self.service, catalog, database)
                 seen[catalog][database] = set()
                 for row in tables_by_db.get(database, []):
+                    seen[catalog][database].add(row.name)
                     payload = build_table_payload(row, cols_by_table.get((database, row.name), []))
                     try:
                         self.om.upsert_table(schema_fqn, payload)
@@ -120,7 +121,7 @@ class MetadataSync:
         if self.cfg.stages.enabled:
             self._sync_stages(seen, stats)
 
-        if self.cfg.metadata.mark_deleted:
+        if self.cfg.metadata.mark_deleted and not stats.failed:
             stats.deleted = self._mark_deleted(seen)
         return stats
 
@@ -140,6 +141,7 @@ class MetadataSync:
         schema_fqn = fqn.build(self.service, st.database, st.schema)
         seen[st.database][st.schema] = set()
         for row in self.db.stages():
+            seen[st.database][st.schema].add(row.name)
             try:
                 self.om.upsert_table(schema_fqn, build_stage_payload(row))
                 stats.tables += 1

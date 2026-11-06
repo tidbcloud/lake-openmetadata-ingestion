@@ -19,9 +19,13 @@ services:
 
   execute-migrate-all:
     container_name: lakeom_migrate
+    volumes:
+      - ./jwt-keys:/opt/openmetadata/jwt:ro
 
   openmetadata-server:
     container_name: lakeom_server
+    volumes:
+      - ./jwt-keys:/opt/openmetadata/jwt:ro
 
   ingestion:
     profiles: ["disabled"]

@@ -117,7 +117,7 @@ class MetadataConfig:
     exclude_databases: list[str] = field(
         default_factory=lambda: ["system", "information_schema", "system_history"]
     )
-    mark_deleted: bool = True
+    mark_deleted: bool = False
 
 
 @dataclass

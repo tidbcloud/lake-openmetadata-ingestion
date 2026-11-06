@@ -7,3 +7,5 @@ docker/.env
 .state_token
 .DS_Store
 *.png
+
+docker/jwt-keys/
