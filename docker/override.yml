@@ -17,21 +17,48 @@ services:
     container_name: lakeom_elasticsearch
     ports: !override []
 
+  # Copy owner-only host keys into an owner-only volume for the image's user.
+  # This one-shot local-demo step needs no network access.
+  jwt-key-init:
+    image: ${OPENMETADATA_SERVER_IMAGE:-docker.getcollate.io/openmetadata/server:2.0.0}
+    user: root
+    network_mode: none
+    restart: "no"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        umask 077
+        cp /source/private_key.der /keys/private_key.der
+        cp /source/public_key.der /keys/public_key.der
+        chown openmetadata:openmetadata /keys /keys/private_key.der /keys/public_key.der
+        chmod 700 /keys
+        chmod 600 /keys/private_key.der /keys/public_key.der
+    volumes:
+      - ./jwt-keys:/source:ro
+      - lakeom-jwt-keys:/keys
+
   execute-migrate-all:
     container_name: lakeom_migrate
     volumes:
-      - ./jwt-keys:/opt/openmetadata/jwt:ro
+      - lakeom-jwt-keys:/opt/openmetadata/jwt:ro
+    depends_on:
+      jwt-key-init:
+        condition: service_completed_successfully
 
   openmetadata-server:
     container_name: lakeom_server
     volumes:
-      - ./jwt-keys:/opt/openmetadata/jwt:ro
+      - lakeom-jwt-keys:/opt/openmetadata/jwt:ro
+    depends_on:
+      jwt-key-init:
+        condition: service_completed_successfully
 
   ingestion:
     profiles: ["disabled"]
 
 volumes:
   lakeom-db-data:
+  lakeom-jwt-keys:
 
 networks:
   app_net:

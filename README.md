@@ -215,9 +215,10 @@ entire deletion sweep and produces a nonzero metadata command exit status.
 
 Run `python docker/bootstrap-env.py` before starting the local demo. It creates
 unique RSA signing keys in `docker/jwt-keys/` and a unique JWT key ID alongside
-the private `.env`; both migrate and server containers mount those keys read-only.
-The key files are PKCS8/SPKI DER, mode 0600. Ensure your chosen container user can
-read the mounted files without making the private key world-readable. Keep the
+the private `.env`. A network-disabled one-shot demo container copies the keys
+into a private volume owned by the image's `openmetadata` user; migrate and server
+mount that volume read-only. Host and volume key files stay mode 0600 (PKCS8/SPKI
+DER), without requiring the host UID to match the container UID. Keep the
 same keys for an existing database volume. Existing demo installations must
 explicitly plan key/token rotation; the bootstrap refuses to overwrite any
 existing secrets and no rotation is performed automatically.
