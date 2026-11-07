@@ -56,14 +56,25 @@ def test_plaintext_warning_does_not_log_url_credentials(caplog):
 def test_login_uses_the_same_ca_and_strict_policy(monkeypatch):
     response = Mock(status_code=200)
     response.json.return_value = {"accessToken": "jwt"}
-    post = Mock(return_value=response)
-    monkeypatch.setattr("lake_openmetadata_ingestion.om_client.requests.post", post)
+    observed = []
+
+    def post(session, url, **kwargs):
+        settings = session.merge_environment_settings(url, {}, None, None, None)
+        observed.append(settings)
+        assert kwargs["allow_redirects"] is False
+        return response
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.invalid:8080")
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/environment-ca.pem")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setattr("lake_openmetadata_ingestion.om_client.requests.Session.post", post)
     assert OpenMetadataClient.login_basic("https://om.example/api", "user", "secret",
                                          tls_ca_bundle="/ca.pem", require_tls=True) == "jwt"
-    assert post.call_args.kwargs["verify"] == "/ca.pem"
+    assert observed[0]["verify"] == "/ca.pem"
+    assert not observed[0]["proxies"]
     with pytest.raises(ValueError, match="require_tls"):
         OpenMetadataClient.login_basic("http://om.example/api", "user", "secret", require_tls=True)
-    assert post.call_count == 1
+    assert len(observed) == 1
 
 
 @pytest.mark.parametrize("host", ["http://localhost/api", "http://om.example/api"])
