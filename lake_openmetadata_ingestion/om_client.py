@@ -43,6 +43,15 @@ def _tls_verify(ca_bundle: str | None) -> bool | str:
     return ca_bundle
 
 
+def _new_session(tls_ca_bundle: str | None) -> requests.Session:
+    verify = _tls_verify(tls_ca_bundle)
+    session = requests.Session()
+    session.verify = verify
+    # Proxies, CA overrides and netrc from the shell must not affect credential requests.
+    session.trust_env = False
+    return session
+
+
 class OMError(RuntimeError):
     def __init__(self, status: int, message: str):
         super().__init__(f"HTTP {status}: {message}")
@@ -55,10 +64,7 @@ class OpenMetadataClient:
         self._base = host.rstrip("/")
         self._timeout = timeout
         _check_transport(self._base, require_tls)
-        self._s = requests.Session()
-        self._s.verify = _tls_verify(tls_ca_bundle)
-        # OM is normally reachable directly; do not let HTTP(S)_PROXY from the shell hijack calls.
-        self._s.trust_env = False
+        self._s = _new_session(tls_ca_bundle)
         self._s.headers.update(
             {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
         )
@@ -104,16 +110,16 @@ class OpenMetadataClient:
         import base64
 
         _check_transport(host, require_tls)
-        resp = requests.post(
-            f"{host.rstrip('/')}/v1/users/login",
-            json={"email": email, "password": base64.b64encode(password.encode()).decode()},
-            timeout=timeout,
-            verify=_tls_verify(tls_ca_bundle),
-            allow_redirects=False,
-        )
-        if resp.status_code >= 300:
-            raise OMError(resp.status_code, "OpenMetadata login failed")
-        return resp.json()["accessToken"]
+        with _new_session(tls_ca_bundle) as session:
+            resp = session.post(
+                f"{host.rstrip('/')}/v1/users/login",
+                json={"email": email, "password": base64.b64encode(password.encode()).decode()},
+                timeout=timeout,
+                allow_redirects=False,
+            )
+            if resp.status_code >= 300:
+                raise OMError(resp.status_code, "OpenMetadata login failed")
+            return resp.json()["accessToken"]
 
     def upsert_policy(self, name: str, description: str, rules: list[dict]) -> dict:
         return self._req(
